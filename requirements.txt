@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pyttsx3
+numpy
+sounddevice
+scipy
+python-multipart
+git+https://github.com/openai/whisper.git

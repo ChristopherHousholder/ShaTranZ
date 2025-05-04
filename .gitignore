@@ -1,0 +1,8 @@
+__pycache__/
+.buildozer/
+.idea/
+whisper_server_env/
+bin/
+*.pyc
+*.pyo
+*.pyd
