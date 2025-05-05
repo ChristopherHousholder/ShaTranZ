@@ -3,14 +3,39 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 import whisper
-import pyttsx3
 import uvicorn
 import tempfile
 import os
 import base64
 
+# Google TTS
+from google.cloud import texttospeech
+import json
+
+# Set credentials path for Google Cloud
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "shatranzserver-f1c1233314df.json"
+
+# Init TTS client
+tts_client = texttospeech.TextToSpeechClient()
+
+def synthesize_speech(text):
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-US",
+        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+    )
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.LINEAR16
+    )
+    response = tts_client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+    return response.audio_content
+
 app = FastAPI()
-model = whisper.load_model("small")  # <-- UPDATED from "base" to "small"
+model = whisper.load_model("small")
 
 @app.post("/transcribe/")
 async def transcribe_audio(
@@ -29,18 +54,10 @@ async def transcribe_audio(
         trans = model.transcribe(tmp_path, task="translate", language=language, fp16=False)
         eng_text = trans.get("text", "").strip()
 
-        # Server-side: filter hallucinated junk
         if not eng_text or len(eng_text) < 5:
             eng_text = "(no meaningful speech detected)"
 
-        engine = pyttsx3.init()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as wf:
-            wav_path = wf.name
-        engine.save_to_file(eng_text, wav_path)
-        engine.runAndWait()
-
-        with open(wav_path, "rb") as f:
-            audio_bytes = f.read()
+        audio_bytes = synthesize_speech(eng_text)
         audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
 
         return JSONResponse({
@@ -52,7 +69,7 @@ async def transcribe_audio(
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:
-        for p in (tmp_path, wav_path):
+        for p in (tmp_path,):
             if p and os.path.exists(p):
                 try:
                     os.remove(p)
